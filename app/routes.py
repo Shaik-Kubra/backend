@@ -109,17 +109,18 @@ def ask_ai():
         return jsonify({"error": str(e)}), 500
 
 
-# --- 3. REGISTER STUDENT ---
+# --- 3. REGISTER STUDENT (Updated for reg_id) ---
 @main.route('/api/register-student', methods=['POST'])
 def register_student():
     data = request.json
     try:
         student_data = {
-            "id": data.get('id'),
+            "id": data.get('id'),         # Auth UUID
             "email": data.get('email'),
             "full_name": data.get('full_name'),
-            "department": data.get('department')
-            # "student_reg_no": data.get('student_reg_no') # Add this back if you fixed your DB schema
+            "department": data.get('department'),
+            # MAP THE FRONTEND ID TO YOUR NEW DATABASE COLUMN
+            "reg_id": data.get('student_reg_no') 
         }
         supabase.table('students').insert(student_data).execute()
         return jsonify({"message": "Student created successfully!"}), 201
