@@ -155,33 +155,48 @@ def submit_complaint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 5. GET STUDENT HISTORY ---
+# --- 5. GET STUDENT HISTORY (Updated to show Faculty Name) ---
 @main.route('/api/my-complaints/<student_id>', methods=['GET'])
 def get_my_complaints(student_id):
     try:
+        # NESTED JOIN QUERY:
+        # 1. Fetch Complaint
+        # 2. Fetch Response details
+        # 3. Inside Response, Fetch Faculty Name
         response = supabase.table('complaints')\
-            .select('description, status, created_at, complaint_responses(response_message)')\
+            .select('description, status, created_at, complaint_responses(response_message, faculty(full_name))')\
             .eq('student_id', student_id)\
+            .order('created_at', desc=True)\
             .execute()
             
         formatted_data = []
         for item in response.data:
             answer_text = "Waiting for response..."
+            responder_name = "" # Default empty
+            
+            # Check if we have a response
             if item.get('complaint_responses') and len(item['complaint_responses']) > 0:
-                answer_text = item['complaint_responses'][0]['response_message']
+                resp_obj = item['complaint_responses'][0]
+                answer_text = resp_obj['response_message']
+                
+                # Extract Faculty Name from the nested object
+                if resp_obj.get('faculty'):
+                    responder_name = resp_obj['faculty']['full_name']
             
             formatted_data.append({
                 "question": item['description'],
                 "answer": answer_text,
                 "status": item['status'],
-                "date": item['created_at']
+                "date": item['created_at'],
+                "faculty_name": responder_name  # <--- NEW FIELD
             })
             
         return jsonify(formatted_data), 200
     except Exception as e:
+        print(f"Error fetching history: {e}")
         return jsonify({"error": str(e)}), 500
 
-# --- 6. REGISTER FACULTY ---
+# --- 6. REGISTER FACULTY (Enabled FID & Phone) ---
 @main.route('/api/register-faculty', methods=['POST'])
 def register_faculty():
     data = request.json
@@ -190,9 +205,10 @@ def register_faculty():
             "id": data.get('id'),
             "full_name": data.get('full_name'),
             "email": data.get('email'),
-            "department": data.get('department')
-            # "fid": data.get('fid'),  # Uncomment if column exists in DB
-            # "phone": data.get('phone') # Uncomment if column exists in DB
+            "department": data.get('department'),
+            # UNCOMMENTED THESE LINES so they save to the DB now:
+            "fid": data.get('fid'),  
+            "phone": data.get('phone') 
         }
         supabase.table('faculty').insert(faculty_data).execute()
         return jsonify({"message": "Faculty profile created!"}), 201
@@ -200,13 +216,15 @@ def register_faculty():
         print(f"Error registering faculty: {e}")
         return jsonify({"error": str(e)}), 500
 
-# --- 7. GET FACULTY COMPLAINTS (With Student Details) ---
+# ...
+
+# --- 7. GET FACULTY COMPLAINTS (Now fetching 'reg_id') ---
 @main.route('/api/faculty/complaints/<faculty_id>', methods=['GET'])
 def get_faculty_complaints(faculty_id):
     try:
-        # Joined query to get student details
+        # CHANGE: We request 'reg_id' inside the students() join
         response = supabase.table('complaints')\
-            .select('*, students(full_name, student_reg_no)')\
+            .select('*, students(full_name, reg_id)')\
             .eq('faculty_id', faculty_id)\
             .order('created_at', desc=True)\
             .execute()
@@ -279,7 +297,7 @@ def update_student_profile(user_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 12. UPDATE FACULTY PROFILE ---
+# --- 12. UPDATE FACULTY PROFILE (Ensure Phone is here) ---
 @main.route('/api/faculty/profile/<user_id>', methods=['PUT'])
 def update_faculty_profile(user_id):
     data = request.json
@@ -288,7 +306,7 @@ def update_faculty_profile(user_id):
             "full_name": data.get('name'),
             "email": data.get('email'),
             "department": data.get('department'),
-            "phone": data.get('phone') # Ensure this column exists in DB
+            "phone": data.get('phone') # This allows you to update phone via "Edit Profile"
         }
         supabase.table('faculty').update(update_data).eq('id', user_id).execute()
         return jsonify({"message": "Updated!"}), 200
